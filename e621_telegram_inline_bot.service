@@ -1,0 +1,15 @@
+[Unit]
+Description=E621 Telegram inline bot
+After=network.target
+
+[Service]
+User=http
+Group=http
+WorkingDirectory=/srv/e621_inline_bot
+ExecStart=/usr/bin/env python3 /srv/e621_inline_bot/index.py
+RemainAfterExit=no
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
