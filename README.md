@@ -1,6 +1,7 @@
 # Telegram E621 inline bot
 
 ![esix](esix_no.png)
+[orginal](https://e621.net/post/show/1417288) by [Presto](https://e621.net/post/index/1/presto_(artist))
 
 # Install
 * Get Python 3
