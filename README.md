@@ -1,4 +1,5 @@
 # Telegram E621 inline bot
+Orginal instance: [@e621_inline_bot](https://t.me/e621_inline_bot)
 
 ![esix](esix_no.png)
 [orginal](https://e621.net/post/show/1417288) by [Presto](https://e621.net/post/index/1/presto_(artist))
