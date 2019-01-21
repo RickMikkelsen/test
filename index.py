@@ -1,5 +1,5 @@
 from telegram.ext import Updater, CommandHandler, InlineQueryHandler
-from telegram import InlineQueryResultPhoto, InlineQueryResultGif  # , InlineQueryResultVideo
+from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif  # , InlineQueryResultVideo
 from e621 import E621
 import traceback
 import logging
@@ -16,7 +16,7 @@ def error(bot, update, error):
 
 
 def start(bot, update):
-    bot.send_message(chat_id=update.message.chat_id, text=config.msg['start'])
+    bot.send_message(chat_id=update.message.chat_id, text=config.msg['start'], parse_mode=ParseMode.MARKDOWN)
 
 
 def inline_query(bot, update):

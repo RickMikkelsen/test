@@ -7,7 +7,7 @@ loglevel = logging.INFO
 token = '<telegram_bot_token>'
 
 msg = {
-    'start': 'I\'m a bot, please talk to me!'
+    'start': 'I\'m only an inline bot, I don\'t talk. Have fun!\n[Cheatsheet](https://e621.net/help/show/cheatsheet)'
 }
 
 e621 = {
