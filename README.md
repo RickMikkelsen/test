@@ -19,4 +19,4 @@ Orginal instance: [@e621_inline_bot](https://t.me/e621_inline_bot)
 # Notes
 * Name: [NSFW] E621 inline
 * Description: Bot to search stuff on e621 inline
-* About: Programmed and mantained by @TilCreator. Bot pic: https://e621.net/post/show/1417288
+* About: Father @TilCreator / Source https://gitlab.com/TilCreator/e621_inline_bot / Bot pic https://e621.net/post/show/1417288
