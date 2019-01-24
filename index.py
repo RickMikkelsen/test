@@ -25,13 +25,19 @@ def inline_query(bot, update):
     results = []
 
     for result in results_raw:
+        file_url = result['file_url']
+        caption = f'https://e621.net/post/show/{result["id"]}'
+        if result['file_size'] > 5000000:
+            file_url = result['sample_url']
+            caption = f'Image is scaled down, full size: {result["file_url"]}\nhttps://e621.net/post/show/{result["id"]}'
+
         if result['file_ext'] in ['jpg', 'png']:
             results.append(
                 InlineQueryResultPhoto(id=result['id'],
                                        description=result['description'],
-                                       photo_url=result['file_url'],
+                                       photo_url=file_url,
                                        thumb_url=result['preview_url'],
-                                       caption=f'https://e621.net/post/show/{result["id"]}')
+                                       caption=caption)
             )
         elif result['file_ext'] == 'gif':
             results.append(
@@ -39,7 +45,7 @@ def inline_query(bot, update):
                                      description=result['description'],
                                      gif_url=result['file_url'],
                                      thumb_url=result['preview_url'],
-                                     caption=f'https://e621.net/post/show/{result["id"]}')
+                                     caption=caption)
             )
         #elif result['file_ext'] == 'webm':
         #    results.append(
