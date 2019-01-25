@@ -14,7 +14,7 @@ updater = Updater(token=config.token)
 
 
 def error(bot, update, error):
-    if config.influx['active']:
+    if config.influx_active:
         i.write_points(
             [
                 {
@@ -80,7 +80,7 @@ def inline_query(bot, update):
     else:
         next_offset = results_raw[-1]['id']
 
-    if config.influx['active']:
+    if config.influx_active:
         i.write_points(
             [
                 {
@@ -102,8 +102,8 @@ def inline_query(bot, update):
 if __name__ == '__main__':
     e = E621(bot_name=config.e621['bot_name'], user_nick=config.e621['user_nick'], version=config.version)
 
-    if config.influx['active']:
-        i = InfluxDBClient(**config['influx'])
+    if config.influx_active:
+        i = InfluxDBClient(**config.influx)
 
     updater.dispatcher.add_handler(CommandHandler('start', start))
     updater.dispatcher.add_handler(InlineQueryHandler(inline_query))

@@ -15,8 +15,8 @@ e621 = {
     'user_nick': '<user_nick>'
 }
 
+influx_active = False
 influx = {
-    'active': False,
     'host': '127.0.0.1',
     'port': 8086,
     'username': '<db_user>',
