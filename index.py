@@ -97,7 +97,7 @@ def inline_query(bot, update):
             ]
         )
 
-    update.inline_query.answer(results=results, next_offset=next_offset)
+    update.inline_query.answer(results=results, next_offset=next_offset, switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo')
 
 
 if __name__ == '__main__':
