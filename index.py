@@ -20,7 +20,7 @@ def error(bot, update, error):
                 {
                     "measurement": "error",
                     "tags": {
-                        "error": error,
+                        "error": str(error),
                         "traceback": "".join(traceback.format_tb(error.__traceback__)),
                     },
                     "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -87,11 +87,12 @@ def inline_query(bot, update):
                     "measurement": "query",
                     "tags": {
                         "query": update.inline_query.query,
-                        "offset": len(update.inline_query.offset) > 0,
-                        "number": len(results_raw)
                     },
                     "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    "fields": {}
+                    "fields": {
+                        "number": len(results_raw),
+                        "offset": len(update.inline_query.offset) > 0
+                    }
                 }
             ]
         )
