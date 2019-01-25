@@ -1,5 +1,7 @@
 from telegram.ext import Updater, CommandHandler, InlineQueryHandler
 from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif  # , InlineQueryResultVideo
+from influxdb import InfluxDBClient
+from datetime import datetime
 from e621 import E621
 import traceback
 import logging
@@ -12,6 +14,21 @@ updater = Updater(token=config.token)
 
 
 def error(bot, update, error):
+    if config.influx['active']:
+        i.write_points(
+            [
+                {
+                    "measurement": "error",
+                    "tags": {
+                        "error": error,
+                        "traceback": "".join(traceback.format_tb(error.__traceback__)),
+                    },
+                    "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    "fields": {}
+                }
+            ]
+        )
+
     logger.warning(f'Update "{update}" caused error "{error}": \n{"".join(traceback.format_tb(error.__traceback__))}')
 
 
@@ -63,11 +80,30 @@ def inline_query(bot, update):
     else:
         next_offset = results_raw[-1]['id']
 
+    if config.influx['active']:
+        i.write_points(
+            [
+                {
+                    "measurement": "query",
+                    "tags": {
+                        "query": update.inline_query.query,
+                        "offset": len(update.inline_query.offset) > 0,
+                        "number": len(results_raw)
+                    },
+                    "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    "fields": {}
+                }
+            ]
+        )
+
     update.inline_query.answer(results=results, next_offset=next_offset)
 
 
 if __name__ == '__main__':
     e = E621(bot_name=config.e621['bot_name'], user_nick=config.e621['user_nick'], version=config.version)
+
+    if config.influx['active']:
+        i = InfluxDBClient(**config['influx'])
 
     updater.dispatcher.add_handler(CommandHandler('start', start))
     updater.dispatcher.add_handler(InlineQueryHandler(inline_query))

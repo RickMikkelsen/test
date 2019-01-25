@@ -14,3 +14,12 @@ e621 = {
     'bot_name': 'Telegram inline bot',
     'user_nick': '<user_nick>'
 }
+
+influx = {
+    'active': False,
+    'host': '127.0.0.1',
+    'port': 8086,
+    'username': '<db_user>',
+    'password': '<db_user_passwd>',
+    'database': '<db_name>'
+}
