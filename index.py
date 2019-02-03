@@ -1,5 +1,5 @@
 from telegram.ext import Updater, CommandHandler, InlineQueryHandler
-from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif, InlineQueryResultVideo, InputTextMessageContent
+from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif  # , InlineQueryResultVideo
 from influxdb import InfluxDBClient
 from datetime import datetime
 from e621 import E621
@@ -21,12 +21,10 @@ def error(bot, update, error):
                     "measurement": "error",
                     "tags": {
                         "error": str(error),
-                        "traceback": ("".join(traceback.format_tb(error.__traceback__))).replace("\n", "\\n"),
+                        "traceback": "".join(traceback.format_tb(error.__traceback__)),
                     },
                     "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    "fields": {
-                        "number": 0
-                    }
+                    "fields": {}
                 }
             ]
         )
@@ -66,22 +64,16 @@ def inline_query(bot, update):
                                      thumb_url=result['preview_url'],
                                      caption=caption)
             )
-        elif result['file_ext'] == 'webm':
-            results.append(
-                InlineQueryResultVideo(id=result['id'],
-                                       title=str(result['id']),
-                                       description=result['description'],
-                                       video_url=result['file_url'],
-                                       thumb_url=result['preview_url'],
-                                       mime_type='text/html',
-                                       caption=f'https://e621.net/post/show/{result["id"]}',
-                                       input_message_content=InputTextMessageContent(message_text=f'https://e621.net/post/show/{result["id"]}\n\n[video]({result["file_url"]})',
-                                                                                     parse_mode='markdown',
-                                                                                     disable_web_page_preview=False)
-                                       )
-            )
-        else:
-            logger.debug(f'Unknown file format "{result["file_ext"]}" ({result["id"]})')
+        #elif result['file_ext'] == 'webm':
+        #    results.append(
+        #        InlineQueryResultVideo(id=result['id'],
+        #                               title=result['id'],
+        #                               description=result['description'],
+        #                               video_url=result['file_url'],
+        #                               thumb_url=result['preview_url'],
+        #                               mime_type='video/webm',
+        #                               caption=f'https://e621.net/post/show/{result["id"]}')
+        #    )
 
     if len(results_raw) < 1:
         next_offset = None
