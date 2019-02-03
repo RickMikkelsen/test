@@ -90,8 +90,8 @@ def inline_query(bot, update):
             )
 
         update.inline_query.answer(results=results, next_offset=next_offset, switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo')
-    except Exception as e:
-        error(bot, update, e)
+    except Exception as ex:
+        error(bot, update, ex)
 
 
 if __name__ == '__main__':
