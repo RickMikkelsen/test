@@ -21,10 +21,12 @@ def error(bot, update, error):
                     "measurement": "error",
                     "tags": {
                         "error": str(error),
-                        "traceback": "".join(traceback.format_tb(error.__traceback__)),
+                        "traceback": "".join(traceback.format_tb(error.__traceback__)).replace('\n', '<br>'),
                     },
                     "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    "fields": {}
+                    "fields": {
+                        'number': 0
+                    }
                 }
             ]
         )
@@ -37,67 +39,70 @@ def start(bot, update):
 
 
 def inline_query(bot, update):
-    results_raw = e.search(tags=update.inline_query.query, limit=50, before_id=update.inline_query.offset)
+    try:
+        results_raw = e.search(tags=update.inline_query.query, limit=50, before_id=update.inline_query.offset)
 
-    results = []
+        results = []
 
-    for result in results_raw:
-        file_url = result['file_url']
-        caption = f'https://e621.net/post/show/{result["id"]}'
-        if result['file_size'] > 5000000:
-            file_url = result['sample_url']
-            caption = f'Image is scaled down, full size: {result["file_url"]}\nhttps://e621.net/post/show/{result["id"]}'
+        for result in results_raw:
+            file_url = result['file_url']
+            caption = f'https://e621.net/post/show/{result["id"]}'
+            if result['file_size'] > 5000000:
+                file_url = result['sample_url']
+                caption = f'Image is scaled down, full size: {result["file_url"]}\nhttps://e621.net/post/show/{result["id"]}'
 
-        if result['file_ext'] in ['jpg', 'png']:
-            results.append(
-                InlineQueryResultPhoto(id=result['id'],
-                                       description=result['description'],
-                                       photo_url=file_url,
-                                       thumb_url=result['preview_url'],
-                                       caption=caption)
-            )
-        elif result['file_ext'] == 'gif':
-            results.append(
-                InlineQueryResultGif(id=result['id'],
-                                     description=result['description'],
-                                     gif_url=result['file_url'],
-                                     thumb_url=result['preview_url'],
-                                     caption=caption)
-            )
-        #elif result['file_ext'] == 'webm':
-        #    results.append(
-        #        InlineQueryResultVideo(id=result['id'],
-        #                               title=result['id'],
-        #                               description=result['description'],
-        #                               video_url=result['file_url'],
-        #                               thumb_url=result['preview_url'],
-        #                               mime_type='video/webm',
-        #                               caption=f'https://e621.net/post/show/{result["id"]}')
-        #    )
+            if result['file_ext'] in ['jpg', 'png']:
+                results.append(
+                    InlineQueryResultPhoto(id=result['id'],
+                                           description=result['description'],
+                                           photo_url=file_url,
+                                           thumb_url=result['preview_url'],
+                                           caption=caption)
+                )
+            elif result['file_ext'] == 'gif':
+                results.append(
+                    InlineQueryResultGif(id=result['id'],
+                                         description=result['description'],
+                                         gif_url=result['file_url'],
+                                         thumb_url=result['preview_url'],
+                                         caption=caption)
+                )
+            #elif result['file_ext'] == 'webm':
+            #    results.append(
+            #        InlineQueryResultVideo(id=result['id'],
+            #                               title=result['id'],
+            #                               description=result['description'],
+            #                               video_url=result['file_url'],
+            #                               thumb_url=result['preview_url'],
+            #                               mime_type='video/webm',
+            #                               caption=f'https://e621.net/post/show/{result["id"]}')
+            #    )
 
-    if len(results_raw) < 1:
-        next_offset = None
-    else:
-        next_offset = results_raw[-1]['id']
+        if len(results_raw) < 1:
+            next_offset = None
+        else:
+            next_offset = results_raw[-1]['id']
 
-    if config.influx_active:
-        i.write_points(
-            [
-                {
-                    "measurement": "query",
-                    "tags": {
-                        "query": update.inline_query.query,
-                    },
-                    "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    "fields": {
-                        "number": len(results_raw),
-                        "offset": len(update.inline_query.offset) > 0
+        if config.influx_active:
+            i.write_points(
+                [
+                    {
+                        "measurement": "query",
+                        "tags": {
+                            "query": update.inline_query.query,
+                        },
+                        "time": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                        "fields": {
+                            "number": len(results_raw),
+                            "offset": len(update.inline_query.offset) > 0
+                        }
                     }
-                }
-            ]
-        )
+                ]
+            )
 
-    update.inline_query.answer(results=results, next_offset=next_offset, switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo')
+        update.inline_query.answer(results=results, next_offset=next_offset, switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo')
+    except Exception as e:
+        error(bot, update, e)
 
 
 if __name__ == '__main__':
