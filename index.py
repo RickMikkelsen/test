@@ -67,17 +67,6 @@ def inline_query(bot, update):
                                          thumb_url=result['preview_url'],
                                          caption=caption)
                 )
-            #elif result['file_ext'] == 'webm':
-            #    results.append(
-            #        InlineQueryResultVideo(id=result['id'],
-            #                               title=result['id'],
-            #                               description=result['description'],
-            #                               video_url=result['file_url'],
-            #                               thumb_url=result['preview_url'],
-            #                               mime_type='video/webm',
-            #                               caption=f'https://e621.net/post/show/{result["id"]}')
-            #    )
-
         if len(results_raw) < 1:
             next_offset = None
         else:
