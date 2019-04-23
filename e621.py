@@ -15,7 +15,6 @@ class E621():
         logger.debug(f'Requesting "https://e621.net/{path}.json", args: "{args}", User-Agent: "{self.name}/{self.version} (by {self.nick} on e621)"')
 
         r = requests.get(f'https://e621.net/{path}.json', data=args, headers={'User-Agent': f'{self.name}/{self.version} (by {self.nick} on e621)'})
-        #print(r.text)
         return r.json()
 
     def search(self, tags, limit=320, before_id=None, all=False):
