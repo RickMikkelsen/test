@@ -1,16 +1,43 @@
 from telegram.ext import Updater, CommandHandler, InlineQueryHandler
-from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif  # , InlineQueryResultVideo
+from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif, InputTextMessageContent  # , InlineQueryResultVideo
 from influxdb import InfluxDBClient
 from datetime import datetime
 from e621 import E621
+import multiprocessing.pool
+import functools
 import traceback
 import logging
+
 import config
+
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=config.loglevel)
 logger = logging.getLogger(__name__)
 
 updater = Updater(token=config.token)
+
+
+def timeout(max_timeout):
+    """Timeout decorator, parameter in seconds."""
+    def timeout_decorator(item):
+        """Wrap the original function."""
+        @functools.wraps(item)
+        def func_wrapper(*args, **kwargs):
+            """Closure for function."""
+            pool = multiprocessing.pool.ThreadPool(processes=1)
+            async_result = pool.apply_async(item, args, kwargs)
+            # raises a TimeoutError if execution exceeds max_timeout
+            return async_result.get(max_timeout)
+        return func_wrapper
+    return timeout_decorator
+
+
+@timeout(config.e621_search_timeout)
+def e621_search_wrapper(e, **args):
+    try:
+        return True, e.search(**args)
+    except Exception as ex:
+        return False, ex
 
 
 def error(bot, update, error):
@@ -40,9 +67,24 @@ def start(bot, update):
 
 def inline_query(bot, update):
     try:
-        results_raw = e.search(tags=update.inline_query.query, limit=50, before_id=update.inline_query.offset)
+        try:
+            success, results_raw = e621_search_wrapper(e, tags=update.inline_query.query, limit=50, before_id=update.inline_query.offset.rstrip('t'))
+        except multiprocessing.pool.TimeoutError as ex:
+            success, results_raw = (False, ex)
 
         results = []
+
+        if not success:
+            results = [InlineQueryResultPhoto(id='-1',
+                                              photo_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
+                                              thumb_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
+                                              input_message_content=InputTextMessageContent('uwu'))]
+
+            update.inline_query.answer(results=results, next_offset=update.inline_query.offset + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo')
+
+            error(bot, update, results_raw)
+
+            return
 
         for result in results_raw:
             file_url = result['file_url']
