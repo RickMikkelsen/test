@@ -20,6 +20,7 @@ e621 = {
     'bot_name': 'Telegram inline bot',
     'user_nick': '<user_nick>'
 }
+e621_search_timeout = 4
 
 influx_active = False
 influx = {
