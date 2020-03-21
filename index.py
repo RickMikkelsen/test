@@ -112,8 +112,9 @@ def inline_query(update, context):
     if config.safe_mode:
         update.inline_query.query += ' rating:s'
 
-    if 'offset:' in update.inline_query.query and not update.inline_query.offset:
-        update.inline_query.offset = re.findall(r'offset:([0-9]*)', update.inline_query.query)[0]
+    if 'offset:' in update.inline_query.query
+        if not update.inline_query.offset:
+            update.inline_query.offset = re.findall(r'offset:([0-9]*)', update.inline_query.query)[0]
         update.inline_query.query = re.sub(r'offset:([0-9]*)', '', update.inline_query.query)
 
     inline_queries[update.inline_query.from_user.id] = {'update': update, 'query': (update.inline_query.query, update.inline_query.offset.strip('t')), 'query_time': time.time()}
