@@ -8,6 +8,7 @@ from collections import OrderedDict
 import time
 import threading
 import signal
+import re
 
 import config
 
@@ -25,7 +26,7 @@ query_queue = OrderedDict()  # OrderedDict(<query>: {'user_ids': [<user_id>, ...
 results_cache = {}  # {<query>: {'time': <time of query>, 'posts': [...]}, ...}
 
 
-def results_to_inline(results_raw):
+def results_to_inline(results_raw, query):
     results = []
 
     for result in results_raw[:50]:
@@ -35,13 +36,19 @@ def results_to_inline(results_raw):
             file_url = result['sample']['url']
             caption = f'Image is scaled down, full size: {result["file"]["url"]}\nhttps://e621.net/posts/{result["id"]}'
 
+        offset = str(int(result['id']) + 1)
+
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query'], switch_inline_query_current_chat=query[0]),
+                                              InlineKeyboardButton(config.msg['switch_inline_button_before'], switch_inline_query_current_chat=f'{query[0]} offset:{offset}')]])
+
         if result['file']['ext'] in ['jpg', 'png']:
             results.append(
                 InlineQueryResultPhoto(id=result['id'],
                                        description=result['description'],
                                        photo_url=file_url,
                                        thumb_url=result['preview']['url'],
-                                       caption=caption)
+                                       caption=caption,
+                                       reply_markup=reply_markup)
             )
         elif result['file']['ext'] == 'gif':
             results.append(
@@ -49,7 +56,8 @@ def results_to_inline(results_raw):
                                      description=result['description'],
                                      gif_url=file_url,
                                      thumb_url=result['preview']['url'],
-                                     caption=caption)
+                                     caption=caption,
+                                     reply_markup=reply_markup)
             )
         elif result['file']['ext'] == 'webm':
             results.append(
@@ -60,7 +68,8 @@ def results_to_inline(results_raw):
                                        thumb_url=result['preview']['url'],
                                        mime_type="video/mp4",
                                        caption=caption,
-                                       input_message_content=InputTextMessageContent(f'https://e621.net/posts/{result["id"]}'))
+                                       input_message_content=InputTextMessageContent(f'https://e621.net/posts/{result["id"]}'),
+                                       reply_markup=reply_markup)
             )
     if len(results_raw) < 1:
         next_offset = None
@@ -96,12 +105,16 @@ def error(update, context=None, error=None):
 
 def start(update, context):
     update.message.reply_text(text=config.msg['start'], parse_mode=ParseMode.MARKDOWN,
-                              reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button'], switch_inline_query='')]]))
+                              reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_empty'], switch_inline_query='')]]))
 
 
 def inline_query(update, context):
     if config.safe_mode:
         update.inline_query.query += ' rating:s'
+
+    if 'offset:' in update.inline_query.query and not update.inline_query.offset:
+        update.inline_query.offset = re.findall(r'offset:([0-9]*)', update.inline_query.query)[0]
+        update.inline_query.query = re.sub(r'offset:([0-9]*)', '', update.inline_query.query)
 
     inline_queries[update.inline_query.from_user.id] = {'update': update, 'query': (update.inline_query.query, update.inline_query.offset.strip('t')), 'query_time': time.time()}
 
@@ -140,7 +153,7 @@ def _debounce_thread():
             try:
                 if wait_time > config.timeouts['return_known_results'] or no_wait:
                     if in_results:
-                        transpiled_posts = results_to_inline(results_cache[query]['posts'])
+                        transpiled_posts = results_to_inline(results_cache[query]['posts'], query)
 
                         update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
                                                    next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'])
