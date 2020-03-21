@@ -112,7 +112,7 @@ def inline_query(update, context):
     if config.safe_mode:
         update.inline_query.query += ' rating:s'
 
-    if 'offset:' in update.inline_query.query
+    if 'offset:' in update.inline_query.query:
         if not update.inline_query.offset:
             update.inline_query.offset = re.findall(r'offset:([0-9]*)', update.inline_query.query)[0]
         update.inline_query.query = re.sub(r'offset:([0-9]*)', '', update.inline_query.query)
