@@ -36,6 +36,10 @@ def results_to_inline(results_raw, query):
             file_url = result['sample']['url']
             caption = f'Image is scaled down, full size: {result["file"]["url"]}\nhttps://e621.net/posts/{result["id"]}'
 
+        description = result['description']
+        if len(description) > 500:
+            description = description[:500] + '...'
+
         offset = str(int(result['id']) + 1)
 
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query'], switch_inline_query_current_chat=query[0]),
@@ -44,7 +48,7 @@ def results_to_inline(results_raw, query):
         if result['file']['ext'] in ['jpg', 'png']:
             results.append(
                 InlineQueryResultPhoto(id=result['id'],
-                                       description=result['description'],
+                                       description=description,
                                        photo_url=file_url,
                                        thumb_url=result['preview']['url'],
                                        caption=caption,
@@ -53,7 +57,7 @@ def results_to_inline(results_raw, query):
         elif result['file']['ext'] == 'gif':
             results.append(
                 InlineQueryResultGif(id=result['id'],
-                                     description=result['description'],
+                                     description=description,
                                      gif_url=file_url,
                                      thumb_url=result['preview']['url'],
                                      caption=caption,
@@ -63,7 +67,7 @@ def results_to_inline(results_raw, query):
             results.append(
                 InlineQueryResultVideo(id=result['id'],
                                        title=result['id'],
-                                       description=result['description'],
+                                       description=description,
                                        video_url=file_url,
                                        thumb_url=result['preview']['url'],
                                        mime_type="video/mp4",
