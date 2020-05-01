@@ -181,7 +181,7 @@ def _debounce_thread():
             except Exception as exce:
                 error(update, error=exce)
 
-        if config.loglevel == logging.DEBUG:
+        if config.loglevel == logging.DEBUG and config.debug_status_line:
             print(f'active_users: {len(inline_queries)}, query_queue: {len(query_queue)}, results_cache: {len(results_cache)}', end='\r')
 
         time.sleep(0.01)

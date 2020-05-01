@@ -4,6 +4,7 @@ git_url = 'https://gitlab.com/TilCreator/e621_inline_bot'
 version = '1.0'
 
 loglevel = logging.INFO
+debug_status_line = False
 
 token = '<telegram token>'
 
