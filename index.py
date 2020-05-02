@@ -210,6 +210,8 @@ def blacklist_remove(update, context, callback=None):
 
                 users.update({'user_id': update.message.from_user.id, 'blacklist': '\n'.join(blacklist)}, ['user_id'])
 
+    blacklist_hash = hash('\n'.join(blacklist))
+
     blacklist_numbered = ''
     for i, line in enumerate(blacklist):
         blacklist_numbered += f'{i} - {line}\n'
