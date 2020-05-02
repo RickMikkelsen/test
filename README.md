@@ -22,7 +22,15 @@ Orginal instance: [@e621_inline_bot](https://t.me/e621_inline_bot) and [@e926_in
     * Name: [NSFW] E621 inline
     * Description: Bot to search stuff on e621 inline
     * About: Master: @TilCreator / Source https://gitlab.com/TilCreator/e621_inline_bot / Bot pic https://e621.net/post/show/1578644
+    * Cmds:
+      blacklist - see and edit your blacklist
+      itrustyou - allow me to save data about you
+      forgetme - delete all data about you
 * @e926_inline_bot
     * Name: E926 inline
     * Description: Bot to search stuff on e926 inline
     * About: Master: @TilCreator / Source https://gitlab.com/TilCreator/e621_inline_bot / Bot pic https://e926.net/post/show/1578644
+    * Cmds:
+      blacklist - see and edit your blacklist
+      itrustyou - allow me to save data about you
+      forgetme - delete all data about you

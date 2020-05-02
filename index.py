@@ -1,7 +1,4 @@
-from telegram.ext import Updater, CommandHandler, InlineQueryHandler
-from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif, InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultVideo, InputTextMessageContent
 from datetime import datetime
-from e621 import E621
 import traceback
 import logging
 from collections import OrderedDict
@@ -9,6 +6,11 @@ import time
 import threading
 import signal
 import re
+import dataset
+from more_itertools import unique_everseen
+from e621 import E621
+from telegram.ext import Updater, CommandHandler, InlineQueryHandler, CallbackQueryHandler, MessageHandler, Filters
+from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif, InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultVideo, InputTextMessageContent
 
 import config
 
@@ -26,10 +28,35 @@ query_queue = OrderedDict()  # OrderedDict(<query>: {'user_ids': [<user_id>, ...
 results_cache = {}  # {<query>: {'time': <time of query>, 'posts': [...]}, ...}
 
 
-def results_to_inline(results_raw, query):
+def results_to_inline(results_raw, query, blacklist):
     results = []
 
     for result in results_raw[:50]:
+        ratings = {"s": "safe", "q": "questionable", "e": "explicit"}
+
+        tags = sorted({x for v in result['tags'].values() for x in v}) + [f'rating:{result["rating"]}',
+                                                                          f'rating:{ratings[result["rating"]]}',
+                                                                          f'id:{result["id"]}']
+
+        blacklisted = False
+        if not re.match(r'.*(?:^|\s+)id:([0-9]+).*', query[0]):  # If 'id:*' not in query, ignore blacklist
+            for line in blacklist.split('\n'):
+                if len(line) < 1:
+                    continue
+
+                in_blacklist = []
+                for tag in line.split():
+                    if tag.startswith('-'):
+                        in_blacklist.append(tag[1:] not in tags)
+                    else:
+                        in_blacklist.append(tag in tags)
+
+                if False not in in_blacklist:
+                    blacklisted = True
+
+        if blacklisted:
+            continue
+
         file_url = result['file']['url']
         caption = f'https://e621.net/posts/{result["id"]}'
         if result['file']['size'] > 5000000:
@@ -112,6 +139,206 @@ def start(update, context):
                               reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_empty'], switch_inline_query='')]]))
 
 
+def blacklist(update, context):
+    blacklist = config.blacklist['default']
+    user_data = None
+
+    user_data = users.find_one(user_id=update.message.from_user.id)
+
+    if user_data:
+        blacklist = user_data['blacklist']
+
+        update.message.reply_text(text=config.msg['blacklist'].format(blacklist=blacklist), parse_mode=ParseMode.MARKDOWN,
+                                  reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['blacklist_button_add'], callback_data='blacklist_add'),
+                                                                      InlineKeyboardButton(config.msg['blacklist_button_clear'], callback_data='blacklist_clear')],
+                                                                     [InlineKeyboardButton(config.msg['blacklist_button_remove'], callback_data='blacklist_remove')]]))
+    else:
+        update.message.reply_text(text=config.msg['blacklist_nodata'].format(blacklist=blacklist), parse_mode=ParseMode.MARKDOWN)
+
+
+def blacklist_clear(update, context):
+    if not users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['nodata_fail'], parse_mode=ParseMode.MARKDOWN)
+        return
+
+    users.update({'user_id': update.message.from_user.id, 'blacklist': ''}, ['user_id'])
+
+    update.message.reply_text(text=config.msg['blacklist_clear'], parse_mode=ParseMode.MARKDOWN)
+
+
+def blacklist_add(update, context):
+    if not users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['nodata_fail'], parse_mode=ParseMode.MARKDOWN)
+        return
+
+    context.user_data['chat_state'] = {'state': 'blacklist_add', 'time': time.time()}
+
+    update.message.reply_text(text=config.msg['blacklist_add'],
+                              reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['blacklist_add_button_cancel'], callback_data='blacklist_add_cancel')]]))
+
+
+def blacklist_remove(update, context, callback=None):
+    if not users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['nodata_fail'], parse_mode=ParseMode.MARKDOWN)
+        return
+
+    blacklist = users.find_one(user_id=update.message.from_user.id)['blacklist'].split('\n')
+    if blacklist == ['']:
+        blacklist = []
+
+    blacklist_hash = hash('\n'.join(blacklist))
+
+    text = config.msg['blacklist_remove']
+
+    if callback:
+        if callback == 'blacklist_remove_done':
+            update.message.reply_text(text=config.msg['blacklist_remove_done_nochange'].format(blacklist='\n'.join(blacklist)), parse_mode=ParseMode.MARKDOWN)
+            return
+
+        _, _, callback_blacklist_hash, callback_blacklist_i = callback.split('_')
+        callback_blacklist_hash, callback_blacklist_i = int(callback_blacklist_hash), int(callback_blacklist_i)
+
+        if blacklist_hash != int(callback_blacklist_hash):
+            text = config.msg['blacklist_remove_error_hash']
+        else:
+            if callback_blacklist_i not in range(len(blacklist)):
+                text = config.msg['blacklist_remove_error_hash']
+            else:
+                text = config.msg['blacklist_remove_done']
+
+                blacklist = [line for i, line in enumerate(blacklist) if i != callback_blacklist_i]
+
+                users.update({'user_id': update.message.from_user.id, 'blacklist': '\n'.join(blacklist)}, ['user_id'])
+
+    blacklist_numbered = ''
+    for i, line in enumerate(blacklist):
+        blacklist_numbered += f'{i} - {line}\n'
+
+    buttons = []
+    for i in range(len(blacklist)):
+        if len(buttons) <= 0 or len(buttons[-1]) >= config.max_buttons_per_row:
+            buttons.append([])
+        buttons[-1].append(InlineKeyboardButton(str(i), callback_data=f'blacklist_remove_{blacklist_hash}_{i}'))
+    
+    buttons.append([InlineKeyboardButton(config.msg['blacklist_remove_button_done'], callback_data='blacklist_remove_done')])
+
+    update.message.reply_text(text=text.format(blacklist_numbered=blacklist_numbered), parse_mode=ParseMode.MARKDOWN,
+                              reply_markup=InlineKeyboardMarkup(buttons))
+
+
+def itrustyou(update, context):
+    if users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['itrustyou_fail'], parse_mode=ParseMode.MARKDOWN)
+
+        return
+
+    update.message.reply_text(text=config.msg['itrustyou'], parse_mode=ParseMode.MARKDOWN,
+                              reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['itrustyou_button'], callback_data='ireallytrustyou')]]))
+
+
+def ireallytrustyou(update, context):
+    if users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['ireallytrustyou_fail'], parse_mode=ParseMode.MARKDOWN)
+
+        return
+
+    users.insert_ignore({'user_id': update.message.from_user.id, 'blacklist': config.blacklist['default']}, ['user_id'])
+
+    update.message.reply_text(text=config.msg['ireallytrustyou'], parse_mode=ParseMode.MARKDOWN)
+
+
+def forgetme(update, context):
+    if not users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['forgetme_fail'], parse_mode=ParseMode.MARKDOWN)
+
+        return
+
+    update.message.reply_text(text=config.msg['forgetme'], parse_mode=ParseMode.MARKDOWN,
+                              reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['forgetme_button'], callback_data='reallyforgetme')]]))
+
+
+def reallyforgetme(update, context):
+    if not users.find_one(user_id=update.message.from_user.id):
+        update.message.reply_text(text=config.msg['forgetme_fail'], parse_mode=ParseMode.MARKDOWN)
+
+        return
+
+    if 'chat_state' in context.user_data:
+        del context.user_data['chat_state']
+
+    users.delete(user_id=update.message.from_user.id)
+
+    update.message.reply_text(text=config.msg['reallyforgetme'], parse_mode=ParseMode.MARKDOWN)
+
+
+def chat_query(update, context):
+    if 'chat_state' in context.user_data.keys() and context.user_data['chat_state']['state'] == 'blacklist_add':
+        if context.user_data['chat_state']['time'] + config.timeouts['chat_state'] < time.time():
+            del context.user_data['chat_state']
+
+            return
+
+        lines_new = []
+
+        for line in update.message.text.split('\n'):
+            line = ' '.join(line.strip(' ').split())  # remove leading, trailing and double spaces
+
+            if len(line) < 1:
+                continue
+
+            if len(line) > config.blacklist['limit']['chars_per_line']:
+                update.message.reply_text(text=config.msg['blacklist_add_error_chars_per_line'], parse_mode=ParseMode.MARKDOWN)
+                return
+
+            lines_new.append(line)
+
+        lines_old = users.find_one(user_id=update.message.from_user.id)['blacklist'].split('\n')
+        if lines_old[0] == '':
+            lines_old = []
+
+        lines_final = list(unique_everseen(lines_old + lines_new))
+
+        if len(lines_final) > config.blacklist['limit']['lines']:
+            update.message.reply_text(text=config.msg['blacklist_add_error_lines'], parse_mode=ParseMode.MARKDOWN)
+            return
+
+        blacklist = '\n'.join(lines_final)
+
+        users.update({'user_id': update.message.from_user.id, 'blacklist': blacklist}, ['user_id'])
+
+        del context.user_data['chat_state']
+
+        update.message.reply_text(text=config.msg['blacklist_add_done'].format(blacklist=blacklist), parse_mode=ParseMode.MARKDOWN)
+
+
+def callback_query(update, context):
+    update.message = update.callback_query.message
+    update.message.from_user = update.callback_query.from_user
+
+    if update.callback_query.data == 'ireallytrustyou':
+        ireallytrustyou(update, context)
+    elif update.callback_query.data == 'reallyforgetme':
+        reallyforgetme(update, context)
+    elif update.callback_query.data == 'blacklist_clear':
+        blacklist_clear(update, context)
+    elif update.callback_query.data == 'blacklist_add':
+        blacklist_add(update, context)
+    elif update.callback_query.data == 'blacklist_add_cancel':
+        if 'chat_state' in context.user_data.keys() and context.user_data['chat_state']['state'] == 'blacklist_add':
+            del context.user_data['chat_state']
+    elif update.callback_query.data == 'blacklist_remove':
+        blacklist_remove(update, context)
+    elif re.match(r'blacklist_remove_(?:-)?[0-9]+_[0-9]+', update.callback_query.data):
+        blacklist_remove(update, context, callback=update.callback_query.data)
+
+        # updater.bot.delete_message(update.callback_query.message.chat_id, update.callback_query.inline_message_id)
+        # return
+    elif update.callback_query.data == 'blacklist_remove_done':
+        blacklist_remove(update, context, callback=update.callback_query.data)
+
+    update.callback_query.edit_message_reply_markup(InlineKeyboardMarkup([[]]))
+
+
 def inline_query(update, context):
     if config.safe_mode:
         update.inline_query.query += ' rating:s'
@@ -160,16 +387,25 @@ def _debounce_thread():
             try:
                 if wait_time > config.timeouts['return_known_results'] or no_wait:
                     if in_results:
-                        transpiled_posts = results_to_inline(results_cache[query]['posts'], query)
+                        blacklist = config.blacklist['default']
+                        user = users.find_one(user_id=user_id)
+                        if user:
+                            blacklist = user['blacklist']
+
+                        is_personal = blacklist != config.blacklist['default']
+
+                        transpiled_posts = results_to_inline(results_cache[query]['posts'], query, blacklist=blacklist)
 
                         update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
-                                                   next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'])
+                                                   next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
 
                         del inline_queries[user_id]
                     elif wait_time > config.timeouts['return_placeholder']:
                         update.inline_query.answer(results=[InlineQueryResultPhoto(id='-1', photo_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
                                                                                    thumb_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
-                                                                                   input_message_content=InputTextMessageContent(config.msg['error_text']))],
+                                                                                   input_message_content=InputTextMessageContent(config.msg['error_text']),
+                                                                                   reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query_retry'],
+                                                                                                                       switch_inline_query_current_chat=query[0])]]))],
                                                    next_offset=update.inline_query.offset + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', cache_time=0)
 
                         del inline_queries[user_id]
@@ -219,13 +455,25 @@ def kill_threads():
 if __name__ == '__main__':
     e = E621(bot_name=config.e621['bot_name'], user_nick=config.e621['user_nick'], api_key=config.e621['api_key'], version=config.version)
 
+    db = dataset.connect(config.db_url)
+
+    users = db.create_table('users', primary_id='user_id')
+
     if config.influx_active:
         i = InfluxDBClient(**config.influx)
 
     updater = Updater(config.token, use_context=True)
 
     updater.dispatcher.add_handler(CommandHandler('start', start))
+    updater.dispatcher.add_handler(CommandHandler('blacklist', blacklist))
+    updater.dispatcher.add_handler(CommandHandler('itrustyou', itrustyou))
+    # updater.dispatcher.add_handler(CommandHandler('ireallytrustyou', ireallytrustyou))
+    updater.dispatcher.add_handler(CommandHandler('forgetme', forgetme))
+    # updater.dispatcher.add_handler(CommandHandler('reallyforgetme', reallyforgetme))
+    updater.dispatcher.add_handler(CallbackQueryHandler(callback_query))
     updater.dispatcher.add_handler(InlineQueryHandler(inline_query))
+    updater.dispatcher.add_handler(MessageHandler(Filters.text, chat_query))
+
     updater.dispatcher.add_error_handler(error)
 
     updater.start_polling()
