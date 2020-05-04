@@ -7,12 +7,17 @@ import threading
 import signal
 import re
 import dataset
+import sys
 from more_itertools import unique_everseen
 from e621 import E621
 from telegram.ext import Updater, CommandHandler, InlineQueryHandler, CallbackQueryHandler, MessageHandler, Filters
 from telegram import ParseMode, InlineQueryResultPhoto, InlineQueryResultGif, InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultVideo, InputTextMessageContent
 
-import config
+config_name = 'config'
+if len(sys.argv) >= 2:
+    config_name += '_' + sys.argv[1]
+
+config = __import__(config_name)
 
 if config.influx_active:
     from influxdb import InfluxDBClient
