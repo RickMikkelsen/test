@@ -355,7 +355,10 @@ def inline_query(update, context):
             update.inline_query.offset = re.findall(r'offset:([0-9]*)', update.inline_query.query)[0]
         update.inline_query.query = re.sub(r'offset:([0-9]*)', '', update.inline_query.query)
 
+    # Replace e621/e926 url with id:<id>
     update.inline_query.query = re.sub(r'(?:http(?:s)?\:\/\/)?e(?:621|926)\.net\/post(?:s|\/show)\/([0-9]+)(?:\?\S*)?', r'id:\g<1>', update.inline_query.query)
+
+    update.inline_query.query = ' '.join(update.inline_query.query.split())
 
     inline_queries[update.inline_query.from_user.id] = {'update': update, 'query': (update.inline_query.query, update.inline_query.offset.strip('t')), 'query_time': time.time()}
 
