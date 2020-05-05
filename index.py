@@ -369,6 +369,17 @@ def inline_query(update, context):
 
 
 def _debounce_thread():
+    if config.periodic_logging['enabled']:
+        logging_data = {'new_queries': 0,
+                        'query_queue': 0,
+                        'results_cache': 0,
+                        'successful_queries': 0,
+                        'failed_queries': 0,
+                        'successfuly_cached': 0}
+        last_logged = time.time() - config.periodic_logging['interval']
+
+        print(','.join(logging_data.keys()), file=open(config.periodic_logging['file'], 'w'))
+
     while bot_active:
         for query in list(results_cache.keys()):
             if time.time() - results_cache[query]['time'] > config.timeouts['result_valid']:
@@ -424,6 +435,8 @@ def _debounce_thread():
                         else:
                             posts = results_cache[(query[0], in_results_other_offset['key'])]['posts'][i:]
 
+                            if config.periodic_logging['enabled']: logging_data['successfuly_cached'] += 1
+
                         blacklist = config.blacklist['default']
                         user = users.find_one(user_id=user_id)
                         if user:
@@ -437,6 +450,8 @@ def _debounce_thread():
                                                    next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
 
                         del inline_queries[user_id]
+
+                        if config.periodic_logging['enabled']: logging_data['successful_queries'] += 1
                     elif wait_time > config.timeouts['return_placeholder']:
                         update.inline_query.answer(results=[InlineQueryResultPhoto(id='-1', photo_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
                                                                                    thumb_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
@@ -446,6 +461,8 @@ def _debounce_thread():
                                                    next_offset=query[1] + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', cache_time=0)
 
                         del inline_queries[user_id]
+
+                        if config.periodic_logging['enabled']: logging_data['failed_queries'] += 1
                     elif (wait_time > config.timeouts['accept_query'] or no_wait) and (not in_queue or not user_in_queue):
                         if not in_queue:
                             query_queue[query] = {'user_ids': [user_id]}
@@ -456,6 +473,18 @@ def _debounce_thread():
 
         if config.loglevel == logging.DEBUG and config.debug_status_line:
             print(f'active_users: {len(inline_queries)}, query_queue: {len(query_queue)}, results_cache: {len(results_cache)}', end='\r')
+
+        if config.periodic_logging['enabled'] and time.time() - last_logged > config.periodic_logging['interval']:
+            print(','.join([str(val) for val in logging_data.values()]), file=open(config.periodic_logging['file'], 'a'))
+
+            logging_data = {'new_queries': len(inline_queries),
+                            'query_queue': len(query_queue),
+                            'results_cache': len(results_cache),
+                            'successful_queries': 0,
+                            'failed_queries': 0,
+                            'successfuly_cached': 0}
+
+            last_logged = time.time()
 
         time.sleep(0.01)
 

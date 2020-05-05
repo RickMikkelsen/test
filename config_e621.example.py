@@ -1,4 +1,5 @@
 import logging
+import time
 
 git_url = 'https://gitlab.com/TilCreator/e621_inline_bot'
 version = '1.0'
@@ -24,7 +25,8 @@ blacklist = {'default': ('gore\n'  # default e621 blacklist
 e621 = {
     'api_key': '<e621 api key>',
     'bot_name': f'Telegram inline bot ({git_url})',
-    'user_nick': '<e621 user nick>'
+    'user_nick': '<e621 user nick>',
+    'posts_per_query': 300  # preferably a multiple of 50
 }
 
 timeouts = {
@@ -43,6 +45,12 @@ influx = {
     'username': '<db_user>',
     'password': '<db_user_passwd>',
     'database': '<db_name>'
+}
+
+periodic_logging = {
+    'enabled': False,
+    'interval': 1,
+    'file': f'logging_{int(time.time())}.csv'
 }
 
 max_buttons_per_row = 5

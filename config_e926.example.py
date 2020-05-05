@@ -1,4 +1,5 @@
 import logging
+import time
 
 git_url = 'https://gitlab.com/TilCreator/e621_inline_bot'
 version = '1.0'
@@ -44,6 +45,12 @@ influx = {
     'username': '<db_user>',
     'password': '<db_user_passwd>',
     'database': '<db_name>'
+}
+
+periodic_logging = {
+    'enabled': False,
+    'interval': 1,
+    'file': f'logging_{int(time.time())}.csv'
 }
 
 max_buttons_per_row = 5
