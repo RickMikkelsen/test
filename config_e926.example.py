@@ -24,7 +24,8 @@ blacklist = {'default': ('gore\n'  # default e621 blacklist
 e621 = {
     'api_key': '<e621 api key>',
     'bot_name': f'Telegram inline bot ({git_url})',
-    'user_nick': '<e621 user nick>'
+    'user_nick': '<e621 user nick>',
+    'posts_per_query': 300  # preferably a multiple of 50
 }
 
 timeouts = {
