@@ -433,7 +433,7 @@ def _debounce_thread():
                         if in_results:
                             posts = results_cache[query]['posts']
                         else:
-                            posts = results_cache[(query[0], in_results_other_offset['key'])]['posts'][i:]
+                            posts = results_cache[(query[0], in_results_other_offset['key'])]['posts'][in_results_other_offset['offset_i']:]
 
                             if config.periodic_logging['enabled']: logging_data['successfuly_cached'] += 1
 
@@ -447,7 +447,7 @@ def _debounce_thread():
                         transpiled_posts = results_to_inline(posts, query, blacklist=blacklist)
 
                         update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
-                                                   next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
+                                                   next_offset=transpiled_posts['next_offset'], cache_time=0, is_personal=is_personal)  # TODO change back  # config.timeouts['result_valid']
 
                         del inline_queries[user_id]
 
