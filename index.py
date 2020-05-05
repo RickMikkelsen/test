@@ -44,7 +44,7 @@ def results_to_inline(results_raw, query, blacklist):
                                                                           f'id:{result["id"]}']
 
         blacklisted = False
-        if not re.match(r'.*(?:^|\s+)id:([0-9]+).*', query[0]):  # If 'id:*' not in query, ignore blacklist
+        if not re.match(r'.*(?:^|\s+)id:([0-9]+)(?:$|\s+).*', query[0]):  # If 'id:*' not in query, ignore blacklist
             for line in blacklist.split('\n'):
                 if len(line) < 1:
                     continue
@@ -354,13 +354,14 @@ def inline_query(update, context):
     if config.safe_mode:
         update.inline_query.query += ' rating:s'
 
-    if 'offset:' in update.inline_query.query:
+    re_offset = r'(?:^|\s+)offset:([0-9]*)(?:$|\s+)'
+    if re.match(rf'.*{re_offset}.*', update.inline_query.query):
         if not update.inline_query.offset:
-            update.inline_query.offset = re.findall(r'offset:([0-9]*)', update.inline_query.query)[0]
-        update.inline_query.query = re.sub(r'offset:([0-9]*)', '', update.inline_query.query)
+            update.inline_query.offset = re.findall(re_offset, update.inline_query.query)[0]
+        update.inline_query.query = re.sub(re_offset, ' ', update.inline_query.query)
 
     # Replace e621/e926 url with id:<id>
-    update.inline_query.query = re.sub(r'(?:http(?:s)?\:\/\/)?e(?:621|926)\.net\/post(?:s|\/show)\/([0-9]+)(?:\?\S*)?', r'id:\g<1>', update.inline_query.query)
+    update.inline_query.query = re.sub(r'(?:^|\s+)(?:http(?:s)?\:\/\/)?e(?:621|926)\.net\/post(?:s|\/show)\/([0-9]+)(?:\?\S*)?(?:$|\s+)', r'id:\g<1>', update.inline_query.query)
 
     update.inline_query.query = ' '.join(update.inline_query.query.split())
 
