@@ -447,7 +447,7 @@ def _debounce_thread():
                         transpiled_posts = results_to_inline(posts, query, blacklist=blacklist)
 
                         update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
-                                                   next_offset=transpiled_posts['next_offset'], cache_time=0, is_personal=is_personal)  # TODO change back  # config.timeouts['result_valid']
+                                                   next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
 
                         del inline_queries[user_id]
 
