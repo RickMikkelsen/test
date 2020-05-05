@@ -36,7 +36,7 @@ results_cache = {}  # {<query>: {'time': <time of query>, 'posts': [...]}, ...}
 def results_to_inline(results_raw, query, blacklist):
     results = []
 
-    for result in results_raw[:50]:
+    for result in results_raw:
         ratings = {"s": "safe", "q": "questionable", "e": "explicit"}
 
         tags = sorted({x for v in result['tags'].values() for x in v}) + [f'rating:{result["rating"]}',
@@ -107,6 +107,10 @@ def results_to_inline(results_raw, query, blacklist):
                                        input_message_content=InputTextMessageContent(f'https://e621.net/posts/{result["id"]}'),
                                        reply_markup=reply_markup)
             )
+
+        if len(results) >= 50:
+            break
+
     if len(results_raw) < 1:
         next_offset = None
     else:
@@ -382,10 +386,27 @@ def _debounce_thread():
             wait_time = time.time() - inline_query['query_time']
             update = inline_query['update']
             query = inline_query['query']
-            no_wait = bool(update.inline_query.offset)
+            no_wait = bool(query[1])
             in_queue = query in query_queue.keys()
             user_in_queue = False if not in_queue else user_id in query_queue[query]['user_ids']
             in_results = query in results_cache.keys()
+
+            in_results_other_offset = {'key': None, 'offset_i': 0, 'length': 0}
+            if not in_results and query[1]:
+                for key in list(results_cache.keys()):  # results_cache could change during iteration
+                    if not key in results_cache or key[0] != query[0]:
+                        continue
+                    results = results_cache[key]
+
+                    for i, result in enumerate(results['posts']):
+                        length = len(results['posts']) - i
+
+                        if result['id'] == int(query[1]) - 1 and length > in_results_other_offset['length']:
+                            in_results_other_offset = {'key': key[1],
+                                                       'offset_i': i,
+                                                       'length': length}
+
+                            break
 
             # logger.debug({'wait_time': wait_time, 'update': update.to_dict(), 'query': query, 'no_wait': no_wait, 'in_queue': in_queue, 'user_in_queue': user_in_queue, 'in_results': in_results})
 
@@ -396,7 +417,12 @@ def _debounce_thread():
 
             try:
                 if wait_time > config.timeouts['return_known_results'] or no_wait:
-                    if in_results:
+                    if in_results or in_results_other_offset['key'] is not None:
+                        if in_results:
+                            posts = results_cache[query]['posts']
+                        else:
+                            posts = results_cache[(query[0], in_results_other_offset['key'])]['posts'][i:]
+
                         blacklist = config.blacklist['default']
                         user = users.find_one(user_id=user_id)
                         if user:
@@ -404,7 +430,7 @@ def _debounce_thread():
 
                         is_personal = blacklist != config.blacklist['default']
 
-                        transpiled_posts = results_to_inline(results_cache[query]['posts'], query, blacklist=blacklist)
+                        transpiled_posts = results_to_inline(posts, query, blacklist=blacklist)
 
                         update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
                                                    next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
@@ -416,7 +442,7 @@ def _debounce_thread():
                                                                                    input_message_content=InputTextMessageContent(config.msg['error_text']),
                                                                                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query_retry'],
                                                                                                                        switch_inline_query_current_chat=query[0])]]))],
-                                                   next_offset=update.inline_query.offset + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', cache_time=0)
+                                                   next_offset=query[1] + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', cache_time=0)
 
                         del inline_queries[user_id]
                     elif (wait_time > config.timeouts['accept_query'] or no_wait) and (not in_queue or not user_in_queue):
@@ -442,7 +468,7 @@ def _query_thread():
 
             try:
                 results_cache[query] = {'time': time.time(),
-                                        'posts': e.posts(tags=query[0], limit=50, before=query[1])['posts']}
+                                        'posts': e.posts(tags=query[0], limit=config.e621['posts_per_query'], before=query[1])['posts']}
             except Exception as exce:
                 error({}, error=exce)
             else:
