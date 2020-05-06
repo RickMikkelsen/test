@@ -111,10 +111,10 @@ def results_to_inline(results_raw, query, blacklist):
         if len(results) >= 50:
             break
 
-    if len(results_raw) < 1:
+    if len(results) < 1:
         next_offset = None
     else:
-        next_offset = results_raw[-1]['id']
+        next_offset = results[-1]['id']
 
     return {'results': results, 'next_offset': next_offset}
 
