@@ -64,7 +64,7 @@ def results_to_inline(results_raw, query, blacklist):
 
         file_url = result['file']['url']
         caption = f'https://e621.net/posts/{result["id"]}'
-        if result['file']['size'] > 5000000:
+        if result['file']['size'] > 500000:
             file_url = result['sample']['url']
             caption = f'Image is scaled down, full size: {result["file"]["url"]}\nhttps://e621.net/posts/{result["id"]}'
 
