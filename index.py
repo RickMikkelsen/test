@@ -41,7 +41,8 @@ def results_to_inline(results_raw, query, blacklist):
 
         tags = sorted({x for v in result['tags'].values() for x in v}) + [f'rating:{result["rating"]}',
                                                                           f'rating:{ratings[result["rating"]]}',
-                                                                          f'id:{result["id"]}']
+                                                                          f'id:{result["id"]}',
+                                                                          f'type:{result["file"]["ext"]}']
 
         blacklisted = False
         if not re.match(r'.*(?:^|\s+)id:([0-9]+)(?:$|\s+).*', query[0]):  # If 'id:*' not in query, ignore blacklist

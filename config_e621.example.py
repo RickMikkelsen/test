@@ -18,7 +18,8 @@ blacklist = {'default': ('gore\n'  # default e621 blacklist
                          'watersports\n'
                          'young -rating:s\n'
                          'loli\n'
-                         'shota'),
+                         'shota\n'
+                         'type:webm'),  # TG is not handeling webms well
              'limit': {'lines': 200,
                        'chars_per_line': 1000}}
 
