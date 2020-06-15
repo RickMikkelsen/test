@@ -26,7 +26,7 @@ e621 = {
     'api_key': '<e621 api key>',
     'bot_name': f'Telegram inline bot ({git_url})',
     'user_nick': '<e621 user nick>',
-    'posts_per_query': 300  # preferably a multiple of 50
+    'posts_per_query': 320
 }
 
 timeouts = {
