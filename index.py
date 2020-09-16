@@ -28,8 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 # query = ('<query>', '<before_id>')
+inline_queries_lock = threading.Lock()
 inline_queries = {}  # {'<userid>': {'update': <update>, 'query': <query>, 'time': <time of query>}, ...}
+query_queue_lock = threading.Lock()
 query_queue = OrderedDict()  # OrderedDict(<query>: {'user_ids': [<user_id>, ...]}, ...)
+results_cache_lock = threading.Lock()
 results_cache = {}  # {<query>: {'time': <time of query>, 'posts': [...]}, ...}
 
 
@@ -231,7 +234,7 @@ def blacklist_remove(update, context, callback=None):
         if len(buttons) <= 0 or len(buttons[-1]) >= config.max_buttons_per_row:
             buttons.append([])
         buttons[-1].append(InlineKeyboardButton(str(i), callback_data=f'blacklist_remove_{blacklist_hash}_{i}'))
-    
+
     buttons.append([InlineKeyboardButton(config.msg['blacklist_remove_button_done'], callback_data='blacklist_remove_done')])
 
     update.message.reply_text(text=text.format(blacklist_numbered=blacklist_numbered), parse_mode=ParseMode.MARKDOWN,
@@ -366,7 +369,8 @@ def inline_query(update, context):
 
     update.inline_query.query = ' '.join(update.inline_query.query.split())
 
-    inline_queries[update.inline_query.from_user.id] = {'update': update, 'query': (update.inline_query.query, update.inline_query.offset.strip('t')), 'query_time': time.time()}
+    with inline_queries_lock:
+        inline_queries[update.inline_query.from_user.id] = {'update': update, 'query': (update.inline_query.query, update.inline_query.offset.strip('t')), 'query_time': time.time()}
 
 
 def _debounce_thread():
@@ -382,95 +386,101 @@ def _debounce_thread():
         print(','.join(logging_data.keys()), file=open(config.periodic_logging['file'], 'w'))
 
     while bot_active:
-        for query in list(results_cache.keys()):
-            if time.time() - results_cache[query]['time'] > config.timeouts['result_valid']:
-                del results_cache[query]
+        with results_cache_lock:
+            for query in list(results_cache.keys()):
+                if time.time() - results_cache[query]['time'] > config.timeouts['result_valid']:
+                    del results_cache[query]
 
-        for query in list(query_queue.keys()):
-            user_ids = query_queue[query]['user_ids']
-            for i in range(len(user_ids)):
-                if user_ids[i] not in inline_queries.keys() or query != inline_queries[user_ids[i]]['query']:
-                    del user_ids[i]
-            if len(user_ids) <= 0:
-                del query_queue[query]
+        with query_queue_lock:
+            for query in list(query_queue.keys()):
+                user_ids = query_queue[query]['user_ids']
+                with inline_queries_lock:
+                    for i in range(len(user_ids)):
+                        if user_ids[i] not in inline_queries.keys() or query != inline_queries[user_ids[i]]['query']:
+                            del user_ids[i]
+                if len(user_ids) <= 0:
+                    del query_queue[query]
 
-        for user_id in list(inline_queries.keys()):
-            inline_query = inline_queries[user_id]
-            wait_time = time.time() - inline_query['query_time']
-            update = inline_query['update']
-            query = inline_query['query']
-            no_wait = bool(query[1])
-            in_queue = query in query_queue.keys()
-            user_in_queue = False if not in_queue else user_id in query_queue[query]['user_ids']
-            in_results = query in results_cache.keys()
+        with inline_queries_lock:
+            for user_id in list(inline_queries.keys()):
+                with query_queue_lock, results_cache_lock:
+                    inline_query = inline_queries[user_id]
+                    wait_time = time.time() - inline_query['query_time']
+                    update = inline_query['update']
+                    query = inline_query['query']
+                    no_wait = bool(query[1])
+                    in_queue = query in query_queue.keys()
+                    user_in_queue = False if not in_queue else user_id in query_queue[query]['user_ids']
+                    in_results = query in results_cache.keys()
 
-            in_results_other_offset = {'key': None, 'offset_i': 0, 'length': 0}
-            if not in_results and query[1]:
-                for key in list(results_cache.keys()):  # results_cache could change during iteration
-                    if not key in results_cache or key[0] != query[0]:
+                    in_results_other_offset = {'key': None, 'offset_i': 0, 'length': 0}
+                    if not in_results and query[1]:
+                        for key, results in results_cache.items():
+                            if not key in results_cache or key[0] != query[0]:
+                                continue
+
+                            for i, result in enumerate(results['posts']):
+                                length = len(results['posts']) - i
+
+                                if result['id'] == int(query[1]) - 1 and length > in_results_other_offset['length']:
+                                    in_results_other_offset = {'key': key[1],
+                                                               'offset_i': i,
+                                                               'length': length}
+
+                                    break
+
+                    # logger.debug({'wait_time': wait_time, 'update': update.to_dict(), 'query': query, 'no_wait': no_wait, 'in_queue': in_queue, 'user_in_queue': user_in_queue, 'in_results': in_results})
+
+                    if wait_time > config.timeouts['forget_query']:
+                        del inline_queries[user_id]
+
                         continue
-                    results = results_cache[key]
 
-                    for i, result in enumerate(results['posts']):
-                        length = len(results['posts']) - i
+                    try:
+                        if wait_time > config.timeouts['return_known_results'] or no_wait:
+                            if in_results or in_results_other_offset['key'] is not None:
+                                if in_results:
+                                    posts = results_cache[query]['posts']
+                                else:
+                                    posts = results_cache[(query[0], in_results_other_offset['key'])]['posts'][in_results_other_offset['offset_i']:]
 
-                        if result['id'] == int(query[1]) - 1 and length > in_results_other_offset['length']:
-                            in_results_other_offset = {'key': key[1],
-                                                       'offset_i': i,
-                                                       'length': length}
+                                    if config.periodic_logging['enabled']: logging_data['successfuly_cached'] += 1
 
-                            break
+                                blacklist = config.blacklist['default']
+                                user = users.find_one(user_id=user_id)
+                                if user:
+                                    blacklist = user['blacklist']
 
-            # logger.debug({'wait_time': wait_time, 'update': update.to_dict(), 'query': query, 'no_wait': no_wait, 'in_queue': in_queue, 'user_in_queue': user_in_queue, 'in_results': in_results})
+                                is_personal = blacklist != config.blacklist['default']
 
-            if wait_time > config.timeouts['forget_query']:
-                del inline_queries[user_id]
+                                transpiled_posts = results_to_inline(posts, query, blacklist=blacklist)
 
-                continue
+                                update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
+                                                           next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
 
-            try:
-                if wait_time > config.timeouts['return_known_results'] or no_wait:
-                    if in_results or in_results_other_offset['key'] is not None:
-                        if in_results:
-                            posts = results_cache[query]['posts']
-                        else:
-                            posts = results_cache[(query[0], in_results_other_offset['key'])]['posts'][in_results_other_offset['offset_i']:]
+                                del inline_queries[user_id]
 
-                            if config.periodic_logging['enabled']: logging_data['successfuly_cached'] += 1
+                                if config.periodic_logging['enabled']: logging_data['successful_queries'] += 1
+                            elif wait_time > config.timeouts['return_placeholder']:
+                                update.inline_query.answer(results=[InlineQueryResultPhoto(id='-1', photo_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
+                                                                                           thumb_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
+                                                                                           input_message_content=InputTextMessageContent(config.msg['error_text']),
+                                                                                           reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query_retry'],
+                                                                                                                               switch_inline_query_current_chat=query[0])]]))],
+                                                           next_offset=query[1] + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', cache_time=0)
 
-                        blacklist = config.blacklist['default']
-                        user = users.find_one(user_id=user_id)
-                        if user:
-                            blacklist = user['blacklist']
+                                del inline_queries[user_id]
 
-                        is_personal = blacklist != config.blacklist['default']
+                                if config.periodic_logging['enabled']: logging_data['failed_queries'] += 1
+                            elif (wait_time > config.timeouts['accept_query'] or no_wait) and (not in_queue or not user_in_queue):
+                                if not in_queue:
+                                    query_queue[query] = {'user_ids': [user_id]}
+                                elif not user_in_queue:
+                                    query_queue[query]['user_ids'].append(user_id)
+                    except Exception as exce:
+                        error(update, error=exce)
 
-                        transpiled_posts = results_to_inline(posts, query, blacklist=blacklist)
-
-                        update.inline_query.answer(switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', results=transpiled_posts['results'],
-                                                   next_offset=transpiled_posts['next_offset'], cache_time=config.timeouts['result_valid'], is_personal=is_personal)
-
-                        del inline_queries[user_id]
-
-                        if config.periodic_logging['enabled']: logging_data['successful_queries'] += 1
-                    elif wait_time > config.timeouts['return_placeholder']:
-                        update.inline_query.answer(results=[InlineQueryResultPhoto(id='-1', photo_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
-                                                                                   thumb_url='https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png',
-                                                                                   input_message_content=InputTextMessageContent(config.msg['error_text']),
-                                                                                   reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query_retry'],
-                                                                                                                       switch_inline_query_current_chat=query[0])]]))],
-                                                   next_offset=query[1] + 't', switch_pm_text=config.msg['switch_pm_text'], switch_pm_parameter='owo', cache_time=0)
-
-                        del inline_queries[user_id]
-
-                        if config.periodic_logging['enabled']: logging_data['failed_queries'] += 1
-                    elif (wait_time > config.timeouts['accept_query'] or no_wait) and (not in_queue or not user_in_queue):
-                        if not in_queue:
-                            query_queue[query] = {'user_ids': [user_id]}
-                        elif not user_in_queue:
-                            query_queue[query]['user_ids'].append(user_id)
-            except Exception as exce:
-                error(update, error=exce)
+                        del inline_queries[user_id]  # Forget the error query
 
         if config.loglevel == logging.DEBUG and config.debug_status_line:
             print(f'active_users: {len(inline_queries)}, query_queue: {len(query_queue)}, results_cache: {len(results_cache)}', end='\r')
@@ -493,20 +503,27 @@ def _debounce_thread():
 def _query_thread():
     while bot_active:
         while len(query_queue) > 0:
-            query = list(query_queue.keys())[0]
+            with query_queue_lock:
+                if len(query_queue) <= 0:
+                    break
+                query = list(query_queue.keys())[0]
 
             logger.debug(f'Starting query: "{query}"')
 
             try:
-                results_cache[query] = {'time': time.time(),
-                                        'posts': e.posts(tags=query[0], limit=config.e621['posts_per_query'], before=query[1])['posts']}
+                posts = e.posts(tags=query[0], limit=config.e621['posts_per_query'], before=query[1])['posts']
+                with results_cache_lock:
+                    results_cache[query] = {'time': time.time(),
+                                            'posts': posts}
             except Exception as exce:
                 error({}, error=exce)
             else:
-                if query in query_queue.keys():
-                    del query_queue[query]
+                with query_queue_lock:
+                    if query in query_queue.keys():
+                        del query_queue[query]
 
-                logger.debug(f'Finished query: "{query}", results: {len(results_cache[query]["posts"])}')
+                with results_cache_lock:
+                    logger.debug(f'Finished query: "{query}", results: {len(results_cache[query]["posts"])}')
 
         time.sleep(0.01)
 
