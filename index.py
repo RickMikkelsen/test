@@ -67,10 +67,13 @@ def results_to_inline(results_raw, query, blacklist):
             continue
 
         file_url = result['file']['url']
-        caption = f'https://e621.net/posts/{result["id"]}'
+        if config.safe_mode:
+            caption = f'https://e926.net/posts/{result["id"]}'
+        else:
+            caption = f'https://e621.net/posts/{result["id"]}'
         if result['file']['size'] > 500000:
             file_url = result['sample']['url']
-            caption = f'Image is scaled down, full size: {result["file"]["url"]}\nhttps://e621.net/posts/{result["id"]}'
+            caption = f'Image is scaled down, full size: {result["file"]["url"]}\n{caption}'
 
         description = result['description']
         if len(description) > 500:
@@ -78,8 +81,12 @@ def results_to_inline(results_raw, query, blacklist):
 
         offset = str(int(result['id']) + 1)
 
-        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query'], switch_inline_query_current_chat=query[0]),
-                                              InlineKeyboardButton(config.msg['switch_inline_button_before'], switch_inline_query_current_chat=f'{query[0]} offset:{offset}')]])
+        if config.safe_mode:
+            query_inline_keyboard = ' '.join([tag for tag in query[0].split(' ') if tag != 'rating:s'])
+        else:
+            query_inline_keyboard = query[0]
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(config.msg['switch_inline_button_query'], switch_inline_query_current_chat=query_inline_keyboard),
+                                              InlineKeyboardButton(config.msg['switch_inline_button_before'], switch_inline_query_current_chat=f'{query_inline_keyboard} offset:{offset}')]])
 
         if result['file']['ext'] in ['jpg', 'png']:
             results.append(
